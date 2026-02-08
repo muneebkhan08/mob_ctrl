@@ -31,6 +31,7 @@ interface WSContextValue {
   ) => Promise<unknown>;
   lastError: string | null;
   pcInfo: Record<string, unknown> | null;
+  certUrl: string | null;
 }
 
 const WSContext = createContext<WSContextValue | null>(null);
@@ -56,6 +57,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [serverIp, setServerIp] = useState("");
   const [lastError, setLastError] = useState<string | null>(null);
   const [pcInfo, setPcInfo] = useState<Record<string, unknown> | null>(null);
+  const [certUrl, setCertUrl] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<Map<string, (data: unknown) => void>>(new Map());
@@ -84,7 +86,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       // If the IP already contains a port (e.g. "192.168.1.5:8765"), use as-is
       // Otherwise append the default server port
       const host = ip.includes(":") ? ip : `${ip}:${SERVER_PORT}`;
-      const url = `ws://${host}/ws`;
+
+      // Use wss:// when page is HTTPS (e.g. Vercel), ws:// when HTTP (local)
+      const isSecure =
+        typeof window !== "undefined" &&
+        window.location.protocol === "https:";
+      const wsProto = isSecure ? "wss" : "ws";
+      const url = `${wsProto}://${host}/ws`;
+
+      // Save the HTTPS URL so the UI can prompt the user to accept the cert
+      if (isSecure) {
+        setCertUrl(`https://${host}`);
+      }
+
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -134,6 +148,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setServerIp("");
     setPcInfo(null);
     setLastError(null);
+    setCertUrl(null);
   }, [cleanup]);
 
   const send = useCallback((action: string, payload?: Record<string, unknown>) => {
@@ -190,6 +205,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         sendAndWait,
         lastError,
         pcInfo,
+        certUrl,
       }}
     >
       {children}

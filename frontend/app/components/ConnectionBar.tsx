@@ -6,7 +6,7 @@ import { Wifi, WifiOff, Loader2, Monitor, ChevronDown, ChevronUp } from "lucide-
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ConnectionBar() {
-  const { status, serverIp, connect, disconnect, lastError, pcInfo } =
+  const { status, serverIp, connect, disconnect, lastError, pcInfo, certUrl } =
     useWebSocket();
   const [inputIp, setInputIp] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -127,6 +127,48 @@ export default function ConnectionBar() {
                 <p className="text-xs text-red-400 bg-red-500/5 border border-red-500/10 rounded-lg px-3 py-2">
                   {lastError}
                 </p>
+              )}
+
+              {certUrl && (
+                <div className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 space-y-1.5">
+                  <p className="text-amber-300 font-semibold">
+                    🔐 First-time setup required
+                  </p>
+                  <p className="text-amber-200/80 leading-relaxed">
+                    Your browser blocks connections to the PC because of the
+                    self-signed certificate. Open the link below, tap{" "}
+                    <strong>&quot;Advanced&quot;</strong> → <strong>&quot;Proceed&quot;</strong>,
+                    then come back and connect again.
+                  </p>
+                  <a
+                    href={certUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-1 px-3 py-1.5 rounded-lg font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
+                  >
+                    Open {certUrl} ↗
+                  </a>
+                </div>
+              )}
+
+              {certUrl && (
+                <div className="text-xs bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2.5 space-y-1">
+                  <p className="text-blue-300 font-semibold">
+                    💡 Or skip this &mdash; open the app directly
+                  </p>
+                  <a
+                    href={certUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-1 px-3 py-1.5 rounded-lg font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-all"
+                  >
+                    Open {certUrl} directly ↗
+                  </a>
+                  <p className="text-blue-200/60 leading-relaxed">
+                    This opens the app from your PC server (no Vercel needed).
+                    It will auto-connect instantly.
+                  </p>
+                </div>
               )}
 
               <p className="text-[10px] text-surface-500 leading-relaxed">

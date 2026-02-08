@@ -32,6 +32,7 @@ from controllers.media import MediaController
 from controllers.clipboard import ClipboardController
 from controllers.system_info import SystemInfoController
 from utils.network import get_local_ip
+from utils.ssl_cert import ensure_ssl_certs
 
 # ── Constants ────────────────────────────────────────────────────────────────
 SERVER_PORT = 8765
@@ -138,12 +139,13 @@ async def lifespan(app: FastAPI):
     print("\n" + "═" * 56)
     print(f"  🖥️  {APP_NAME} v{PROTOCOL_VERSION}")
     if has_frontend:
-        print(f"  🌐  Open on phone → http://{local_ip}:{SERVER_PORT}")
+        print(f"  🌐  Open on phone → https://{local_ip}:{SERVER_PORT}")
     else:
         print(f"  ⚠️  Frontend not built — run: cd frontend && npm run build")
-    print(f"  🔌  WebSocket  →  ws://{local_ip}:{SERVER_PORT}/ws")
+    print(f"  🔌  WebSocket  →  wss://{local_ip}:{SERVER_PORT}/ws")
     print(f"  📡  UDP Disco   →  port {UDP_PORT}")
     print(f"  💻  Platform    →  {platform.system()} {platform.release()}")
+    print(f"  🔐  First time? Accept cert at https://{local_ip}:{SERVER_PORT}")
     print("═" * 56 + "\n")
     yield
 
@@ -245,10 +247,15 @@ else:
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    local_ip = get_local_ip()
+    cert_file, key_file = ensure_ssl_certs(local_ip)
+
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
         port=SERVER_PORT,
         log_level="warning",
         reload=False,
+        ssl_certfile=cert_file,
+        ssl_keyfile=key_file,
     )
