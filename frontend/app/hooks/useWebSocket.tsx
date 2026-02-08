@@ -39,6 +39,18 @@ const WSContext = createContext<WSContextValue | null>(null);
 const SERVER_PORT = 8765;
 const RECONNECT_DELAY = 3000;
 
+/**
+ * Detect if the frontend is being served from the PC server itself.
+ * If so, we can auto-connect using the page's hostname (no manual IP needed).
+ */
+function getAutoServerIp(): string | null {
+  if (typeof window === "undefined") return null;
+  const { hostname, port } = window.location;
+  // If served from the Python server (port 8765), use same hostname
+  if (port === String(SERVER_PORT)) return hostname;
+  return null;
+}
+
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [serverIp, setServerIp] = useState("");
@@ -69,7 +81,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       setLastError(null);
       setStatus("connecting");
 
-      const url = `ws://${ip}:${SERVER_PORT}/ws`;
+      // If the IP already contains a port (e.g. "192.168.1.5:8765"), use as-is
+      // Otherwise append the default server port
+      const host = ip.includes(":") ? ip : `${ip}:${SERVER_PORT}`;
+      const url = `ws://${host}/ws`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -154,6 +169,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   // Cleanup on unmount
   useEffect(() => cleanup, [cleanup]);
+
+  // Auto-connect when served from the Python server (same origin)
+  useEffect(() => {
+    const autoIp = getAutoServerIp();
+    if (autoIp && status === "disconnected") {
+      connect(autoIp);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <WSContext.Provider

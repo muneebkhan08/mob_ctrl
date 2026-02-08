@@ -1,10 +1,12 @@
 """
 PC Control Server — Main Entry Point
 Runs a FastAPI WebSocket server + UDP broadcast for auto-discovery.
+Also serves the frontend static files so everything runs from one server.
 """
 
 import asyncio
 import json
+import os
 import socket
 import struct
 import sys
@@ -12,10 +14,13 @@ import threading
 import time
 import platform
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from controllers.mouse import MouseController
 from controllers.keyboard import KeyboardController
@@ -129,9 +134,14 @@ async def lifespan(app: FastAPI):
     t = threading.Thread(target=udp_broadcast_loop, daemon=True)
     t.start()
     local_ip = get_local_ip()
+    has_frontend = FRONTEND_DIR.exists()
     print("\n" + "═" * 56)
     print(f"  🖥️  {APP_NAME} v{PROTOCOL_VERSION}")
-    print(f"  🌐  WebSocket  →  ws://{local_ip}:{SERVER_PORT}/ws")
+    if has_frontend:
+        print(f"  🌐  Open on phone → http://{local_ip}:{SERVER_PORT}")
+    else:
+        print(f"  ⚠️  Frontend not built — run: cd frontend && npm run build")
+    print(f"  🔌  WebSocket  →  ws://{local_ip}:{SERVER_PORT}/ws")
     print(f"  📡  UDP Disco   →  port {UDP_PORT}")
     print(f"  💻  Platform    →  {platform.system()} {platform.release()}")
     print("═" * 56 + "\n")
@@ -157,6 +167,10 @@ async def health():
         "hostname": socket.gethostname(),
         "platform": platform.system(),
     }
+
+
+# ── Static Frontend Serving ──────────────────────────────────────────────────
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "out"
 
 
 @app.websocket("/ws")
@@ -197,6 +211,36 @@ async def websocket_endpoint(ws: WebSocket):
         print(f"  ❌  Client disconnected: {client.host}:{client.port}")
     except Exception as exc:
         print(f"  ⚠️  Error: {exc}")
+
+
+# ── Serve Frontend ───────────────────────────────────────────────────────────
+if FRONTEND_DIR.exists():
+    # Serve Next.js static export from /frontend/out
+    @app.get("/{path:path}")
+    async def serve_frontend(path: str):
+        """Serve the static frontend. Falls back to index.html for SPA routing."""
+        file_path = FRONTEND_DIR / path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # Try .html extension (Next.js exports pages as page.html)
+        html_path = FRONTEND_DIR / f"{path}.html"
+        if html_path.is_file():
+            return FileResponse(html_path)
+        # Fallback to index.html
+        index_path = FRONTEND_DIR / "index.html"
+        if index_path.is_file():
+            return FileResponse(index_path)
+        return {"error": "Frontend not built. Run: cd frontend && npm run build"}
+
+    print(f"  📂  Frontend found at {FRONTEND_DIR}")
+else:
+    @app.get("/")
+    async def no_frontend():
+        return {
+            "message": "PC Control Server is running. Frontend not found.",
+            "hint": "Run: cd frontend && npm run build",
+            "websocket": f"ws://{get_local_ip()}:{SERVER_PORT}/ws",
+        }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
