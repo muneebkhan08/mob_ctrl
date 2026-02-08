@@ -31,7 +31,6 @@ interface WSContextValue {
   ) => Promise<unknown>;
   lastError: string | null;
   pcInfo: Record<string, unknown> | null;
-  isDeployed: boolean;
 }
 
 const WSContext = createContext<WSContextValue | null>(null);
@@ -39,18 +38,6 @@ const WSContext = createContext<WSContextValue | null>(null);
 // ── Provider ────────────────────────────────────────────────────────────────
 const SERVER_PORT = 8765;
 const RECONNECT_DELAY = 3000;
-
-/**
- * Detect if running on the Vercel-deployed site (or any external host).
- * When deployed, we can’t connect via WebSocket — we redirect instead.
- */
-function checkIsDeployed(): boolean {
-  if (typeof window === "undefined") return false;
-  const { hostname, port } = window.location;
-  if (port === String(SERVER_PORT)) return false;
-  if (hostname === "localhost" || hostname === "127.0.0.1") return false;
-  return true;
-}
 
 /**
  * Detect if the frontend is being served from the PC server itself.
@@ -69,17 +56,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [serverIp, setServerIp] = useState("");
   const [lastError, setLastError] = useState<string | null>(null);
   const [pcInfo, setPcInfo] = useState<Record<string, unknown> | null>(null);
-  const [isDeployed, setIsDeployed] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<Map<string, (data: unknown) => void>>(new Map());
   const idCounterRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
-
-  // Detect deployed state on mount
-  useEffect(() => {
-    setIsDeployed(checkIsDeployed());
-  }, []);
 
   const cleanup = useCallback(() => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -95,14 +76,23 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(
     (ip: string) => {
+      const host = ip.includes(":") ? ip : `${ip}:${SERVER_PORT}`;
+
+      // If we're on an HTTPS page (e.g. Vercel), browsers block ws://.
+      // Redirect to the PC server which serves the same app over HTTP.
+      if (
+        typeof window !== "undefined" &&
+        window.location.protocol === "https:"
+      ) {
+        window.location.href = `http://${host}`;
+        return;
+      }
+
       cleanup();
       setServerIp(ip);
       setLastError(null);
       setStatus("connecting");
 
-      // If the IP already contains a port (e.g. "192.168.1.5:8765"), use as-is
-      // Otherwise append the default server port
-      const host = ip.includes(":") ? ip : `${ip}:${SERVER_PORT}`;
       const url = `ws://${host}/ws`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
@@ -134,8 +124,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
       ws.onclose = () => {
         setStatus("disconnected");
-        // Only auto-reconnect when served from the PC server (same origin)
-        if (ip && !checkIsDeployed()) {
+        // Auto-reconnect
+        if (ip) {
           reconnectTimerRef.current = setTimeout(() => connect(ip), RECONNECT_DELAY);
         }
       };
@@ -209,7 +199,6 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         sendAndWait,
         lastError,
         pcInfo,
-        isDeployed,
       }}
     >
       {children}
