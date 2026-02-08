@@ -31,6 +31,7 @@ from controllers.volume import VolumeController
 from controllers.media import MediaController
 from controllers.clipboard import ClipboardController
 from controllers.system_info import SystemInfoController
+from controllers.screen import ScreenController
 from utils.network import get_local_ip
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ volume = VolumeController()
 media = MediaController()
 clipboard = ClipboardController()
 system_info = SystemInfoController()
+screen = ScreenController()
 
 # ── Route Dispatch Table ─────────────────────────────────────────────────────
 HANDLERS = {
@@ -96,6 +98,8 @@ HANDLERS = {
     "clipboard_set": clipboard.set_text,
     # System Info
     "system_info": system_info.get_info,
+    # Screen
+    "screen_capture": screen.capture,
 }
 
 
@@ -156,6 +160,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/screenshot")
+async def screenshot_endpoint(quality: int = 50, scale: float = 0.5):
+    """HTTP endpoint for screen capture — returns base64 JPEG."""
+    from fastapi.responses import Response
+    import io, pyautogui
+    img = pyautogui.screenshot()
+    if scale < 1.0:
+        new_w = max(1, int(img.width * scale))
+        new_h = max(1, int(img.height * scale))
+        img = img.resize((new_w, new_h))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality, optimize=True)
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
 @app.get("/health")
